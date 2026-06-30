@@ -36,7 +36,7 @@ export default function Home() {
           className="text-center mb-8"
         >
           <h1 className="text-4xl md:text-5xl font-black text-white mb-2 tracking-tight">
-            🎲 Lucky Toss
+            🎲 N9h1 Lucky Toss
           </h1>
           <p className="text-purple-300 text-sm md:text-base font-medium">Thử vận may của bạn!</p>
         </motion.div>
