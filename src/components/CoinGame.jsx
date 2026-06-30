@@ -1,16 +1,24 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Coin3D from "@/components/Coin3D";
 import StatsBar from "@/components/StatsBar";
 import QuickSimButtons from "@/components/QuickSimButtons";
+import TheoryPanel from "@/components/TheoryPanel";
+import { loadJSON, saveJSON } from "@/lib/storage";
 import confetti from "canvas-confetti";
 
 const COIN_LABELS = ["Ngửa", "Sấp"];
+const STORAGE_KEY = "probabli_coin_history";
 
 export default function CoinGame() {
   const [result, setResult] = useState(null);
   const [isFlipping, setIsFlipping] = useState(false);
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState(() => loadJSON(STORAGE_KEY, []));
+
+  // Lưu history vào localStorage mỗi khi thay đổi, để không mất khi refresh
+  useEffect(() => {
+    saveJSON(STORAGE_KEY, history);
+  }, [history]);
 
   const flip = useCallback(() => {
     if (isFlipping) return;
@@ -71,6 +79,21 @@ export default function CoinGame() {
   const displayColor = result === "heads"
     ? "linear-gradient(135deg, #FFB800, #FFD700)"
     : "linear-gradient(135deg, #b0b0b0, #e0e0e0)";
+
+  // --- Kỳ vọng & Phương sai (biến Bernoulli: Ngửa = 1, Sấp = 0, p = 0.5) ---
+  const p = 0.5;
+  const theoreticalE = p; // E[X] = p
+  const theoreticalVar = p * (1 - p); // Var(X) = p(1-p)
+
+  const numericHistory = history.map((h) => (h === "Ngửa" ? 1 : 0));
+  const sampleE =
+    numericHistory.length > 0
+      ? numericHistory.reduce((a, b) => a + b, 0) / numericHistory.length
+      : null;
+  const sampleVar =
+    numericHistory.length > 0
+      ? numericHistory.reduce((a, b) => a + (b - sampleE) ** 2, 0) / numericHistory.length
+      : null;
 
   return (
     <div>
@@ -188,6 +211,26 @@ export default function CoinGame() {
 
       {/* Stats */}
       <StatsBar history={history} labels={COIN_LABELS} title="Đồng Xu" />
+
+      {/* Lý thuyết: Kỳ vọng & Phương sai */}
+      <TheoryPanel
+        title="Kỳ vọng & Phương sai"
+        description='Coi "Ngửa" = 1, "Sấp" = 0, đây là biến ngẫu nhiên Bernoulli với xác suất p = 0,5. Kỳ vọng E[X] = p là tỉ lệ Ngửa trung bình về lâu dài; phương sai Var(X) = p(1−p) đo độ dao động quanh tỉ lệ đó.'
+        rows={[
+          {
+            label: "E[X] — Kỳ vọng (tỉ lệ Ngửa)",
+            formula: "p",
+            theoretical: theoreticalE.toFixed(2),
+            sample: sampleE !== null ? sampleE.toFixed(2) : "—",
+          },
+          {
+            label: "Var(X) — Phương sai",
+            formula: "p(1−p)",
+            theoretical: theoreticalVar.toFixed(2),
+            sample: sampleVar !== null ? sampleVar.toFixed(2) : "—",
+          },
+        ]}
+      />
     </div>
   );
 }

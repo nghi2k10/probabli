@@ -1,19 +1,42 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Dice3D from "@/components/Dice3D";
 import StatsBar from "@/components/StatsBar";
 import QuickSimButtons from "@/components/QuickSimButtons";
 import SumDistributionChart from "@/components/SumDistributionChart";
+import TheoryPanel from "@/components/TheoryPanel";
+import { loadJSON, saveJSON } from "@/lib/storage";
 import confetti from "canvas-confetti";
 
 const DICE_LABELS = ["1", "2", "3", "4", "5", "6"];
+const STORAGE_KEY_PREFIX = "probabli_dice_";
+const STORAGE_KEY_COUNT = "probabli_dice_count";
+
+// Mỗi số lượng xúc xắc (1, 2, 3) có dữ liệu lịch sử riêng vì ý nghĩa thống kê khác nhau
+function loadDiceData(count) {
+  return loadJSON(STORAGE_KEY_PREFIX + count, { history: [], sumHistory: [] });
+}
 
 export default function DiceGame() {
-  const [diceCount, setDiceCount] = useState(1);
+  const [diceCount, setDiceCount] = useState(() => Number(loadJSON(STORAGE_KEY_COUNT, 1)) || 1);
   const [results, setResults] = useState(null);
   const [isRolling, setIsRolling] = useState(false);
-  const [history, setHistory] = useState([]);
-  const [sumHistory, setSumHistory] = useState([]);
+  const [history, setHistory] = useState(() => loadDiceData(diceCount).history);
+  const [sumHistory, setSumHistory] = useState(() => loadDiceData(diceCount).sumHistory);
+
+  // Khi đổi số xúc xắc, nạp lại dữ liệu đã lưu riêng cho số lượng đó (không mất dữ liệu cũ)
+  useEffect(() => {
+    const data = loadDiceData(diceCount);
+    setHistory(data.history);
+    setSumHistory(data.sumHistory);
+    saveJSON(STORAGE_KEY_COUNT, diceCount);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diceCount]);
+
+  // Lưu history/sumHistory vào localStorage mỗi khi thay đổi
+  useEffect(() => {
+    saveJSON(STORAGE_KEY_PREFIX + diceCount, { history, sumHistory });
+  }, [history, sumHistory, diceCount]);
 
   const roll = useCallback(() => {
     if (isRolling) return;
@@ -72,10 +95,26 @@ export default function DiceGame() {
     setHistory([]);
     setSumHistory([]);
     setIsRolling(false);
+    saveJSON(STORAGE_KEY_PREFIX + diceCount, { history: [], sumHistory: [] });
   };
 
   const total = results ? results.reduce((a, b) => a + b, 0) : 0;
   const diceSize = diceCount === 3 ? "small" : "large";
+
+  // --- Tính kỳ vọng (E) và phương sai (Var) ---
+  const sampleStats = (arr) => {
+    if (arr.length === 0) return { mean: null, variance: null };
+    const m = arr.reduce((a, b) => a + b, 0) / arr.length;
+    const v = arr.reduce((a, b) => a + (b - m) ** 2, 0) / arr.length;
+    return { mean: m, variance: v };
+  };
+
+  // Lý thuyết cho 1 viên xúc xắc đồng khả năng (1-6): E[X]=3.5, Var(X)=35/12
+  const singleDieE = 3.5;
+  const singleDieVar = 35 / 12;
+
+  const faceSample = sampleStats(history.map(Number));
+  const sumSample = sampleStats(sumHistory);
 
   return (
     <div>
@@ -99,8 +138,6 @@ export default function DiceGame() {
                 if (isRolling) return;
                 setDiceCount(n);
                 setResults(null);
-                setHistory([]);
-                setSumHistory([]);
               }}
               disabled={isRolling}
               className="w-9 h-9 rounded-xl font-black text-sm transition-all duration-200 disabled:cursor-not-allowed"
@@ -247,6 +284,46 @@ export default function DiceGame() {
 
       {/* Phân phối tổng — chỉ có ý nghĩa khi tung từ 2 xúc xắc trở lên */}
       {diceCount > 1 && <SumDistributionChart sums={sumHistory} diceCount={diceCount} />}
+
+      {/* Lý thuyết: Kỳ vọng & Phương sai */}
+      <TheoryPanel
+        title="Kỳ vọng & Phương sai"
+        description={
+          diceCount === 1
+            ? "Với 1 xúc xắc 6 mặt đồng khả năng, mỗi mặt có xác suất 1/6. Kỳ vọng E[X] là giá trị trung bình \"mong đợi\" về lâu dài; phương sai Var(X) đo độ phân tán quanh giá trị đó."
+            : `Khi tung ${diceCount} xúc xắc, Tổng (S) là một biến ngẫu nhiên mới. Vì các lần tung độc lập, kỳ vọng cộng dồn: E[S] = ${diceCount} × E[X]. Phương sai cũng cộng dồn: Var(S) = ${diceCount} × Var(X).`
+        }
+        rows={[
+          {
+            label: "E[X] — Kỳ vọng 1 viên xúc xắc",
+            formula: "(1+2+...+6)/6",
+            theoretical: singleDieE.toFixed(2),
+            sample: faceSample.mean !== null ? faceSample.mean.toFixed(2) : "—",
+          },
+          {
+            label: "Var(X) — Phương sai 1 viên xúc xắc",
+            formula: "E[X²] − E[X]²",
+            theoretical: singleDieVar.toFixed(2),
+            sample: faceSample.variance !== null ? faceSample.variance.toFixed(2) : "—",
+          },
+          ...(diceCount > 1
+            ? [
+                {
+                  label: `E[S] — Kỳ vọng Tổng ${diceCount} xúc xắc`,
+                  formula: `${diceCount} × 3.5`,
+                  theoretical: (singleDieE * diceCount).toFixed(2),
+                  sample: sumSample.mean !== null ? sumSample.mean.toFixed(2) : "—",
+                },
+                {
+                  label: `Var(S) — Phương sai Tổng ${diceCount} xúc xắc`,
+                  formula: `${diceCount} × 35/12`,
+                  theoretical: (singleDieVar * diceCount).toFixed(2),
+                  sample: sumSample.variance !== null ? sumSample.variance.toFixed(2) : "—",
+                },
+              ]
+            : []),
+        ]}
+      />
     </div>
   );
 }
