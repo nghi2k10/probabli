@@ -2,6 +2,8 @@ import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Dice3D from "@/components/Dice3D";
 import StatsBar from "@/components/StatsBar";
+import QuickSimButtons from "@/components/QuickSimButtons";
+import SumDistributionChart from "@/components/SumDistributionChart";
 import confetti from "canvas-confetti";
 
 const DICE_LABELS = ["1", "2", "3", "4", "5", "6"];
@@ -11,6 +13,7 @@ export default function DiceGame() {
   const [results, setResults] = useState(null);
   const [isRolling, setIsRolling] = useState(false);
   const [history, setHistory] = useState([]);
+  const [sumHistory, setSumHistory] = useState([]);
 
   const roll = useCallback(() => {
     if (isRolling) return;
@@ -23,6 +26,7 @@ export default function DiceGame() {
       setResults(newResults);
       // Record each die result into history
       setHistory((prev) => [...newResults.map(String).reverse(), ...prev].slice(0, 100));
+      setSumHistory((prev) => [...prev, newResults.reduce((a, b) => a + b, 0)]);
 
       // Small confetti burst
       confetti({
@@ -35,9 +39,38 @@ export default function DiceGame() {
     }, 1200);
   }, [isRolling, diceCount]);
 
+  // Mô phỏng nhanh N lần tung, không có hiệu ứng xoay — minh hoạ Luật số lớn
+  const quickSimulate = useCallback(
+    (n) => {
+      if (isRolling) return;
+      const newHistoryEntries = [];
+      const newSums = [];
+      let lastResults = null;
+      for (let i = 0; i < n; i++) {
+        const r = Array.from({ length: diceCount }, () => Math.floor(Math.random() * 6) + 1);
+        newHistoryEntries.push(...r.map(String));
+        newSums.push(r.reduce((a, b) => a + b, 0));
+        lastResults = r;
+      }
+      setResults(lastResults);
+      setHistory((prev) => [...newHistoryEntries.reverse(), ...prev].slice(0, 100));
+      setSumHistory((prev) => [...prev, ...newSums]);
+
+      confetti({
+        particleCount: 60,
+        spread: 80,
+        origin: { y: 0.55 },
+        colors: ["#FFD700", "#FF8C00", "#FF4488", "#44CCFF"],
+        scalar: 1,
+      });
+    },
+    [isRolling, diceCount]
+  );
+
   const reset = () => {
     setResults(null);
     setHistory([]);
+    setSumHistory([]);
     setIsRolling(false);
   };
 
@@ -62,7 +95,13 @@ export default function DiceGame() {
           {[1, 2, 3].map((n) => (
             <button
               key={n}
-              onClick={() => !isRolling && setDiceCount(n)}
+              onClick={() => {
+                if (isRolling) return;
+                setDiceCount(n);
+                setResults(null);
+                setHistory([]);
+                setSumHistory([]);
+              }}
               disabled={isRolling}
               className="w-9 h-9 rounded-xl font-black text-sm transition-all duration-200 disabled:cursor-not-allowed"
               style={
@@ -186,6 +225,8 @@ export default function DiceGame() {
           >
             {isRolling ? "Đang tung..." : `🎲 Tung ${diceCount} Xúc Xắc`}
           </motion.button>
+
+          <QuickSimButtons onSimulate={quickSimulate} disabled={isRolling} />
         </div>
       </div>
 
@@ -203,6 +244,9 @@ export default function DiceGame() {
 
       {/* Stats */}
       <StatsBar history={history} labels={DICE_LABELS} title="Xúc Xắc" />
+
+      {/* Phân phối tổng — chỉ có ý nghĩa khi tung từ 2 xúc xắc trở lên */}
+      {diceCount > 1 && <SumDistributionChart sums={sumHistory} diceCount={diceCount} />}
     </div>
   );
 }

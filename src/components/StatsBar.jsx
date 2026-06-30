@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine, Label } from "recharts";
 
 const COLORS = ["#FF8C00", "#FFD700", "#FF4488", "#44CCFF", "#44FF88", "#CC44FF"];
 
@@ -12,12 +12,18 @@ export default function StatsBar({ history, labels, title }) {
     counts[h] = (counts[h] || 0) + 1;
   });
 
+  // Xác suất lý thuyết (giả định đồng khả năng): mỗi mặt = 100 / số mặt
+  const theoreticalPct = 100 / labels.length;
+
   const chartData = labels.map((label, i) => ({
     name: label,
     count: counts[label] || 0,
     pct: total > 0 ? (((counts[label] || 0) / total) * 100).toFixed(1) : "0.0",
     color: COLORS[i % COLORS.length],
   }));
+
+  // Để vẽ đường lý thuyết trên cùng trục với count, quy đổi % lý thuyết sang số lượng kỳ vọng
+  const expectedCount = total > 0 ? (theoreticalPct / 100) * total : 0;
 
   const recent = [...history].reverse().slice(0, 20);
 
@@ -59,22 +65,46 @@ export default function StatsBar({ history, labels, title }) {
                     <Cell key={index} fill={entry.color} />
                   ))}
                 </Bar>
+                <ReferenceLine
+                  y={expectedCount}
+                  stroke="#FFFFFF"
+                  strokeDasharray="5 4"
+                  strokeWidth={1.5}
+                  strokeOpacity={0.85}
+                >
+                  <Label
+                    value={`Lý thuyết: ${theoreticalPct.toFixed(1)}%`}
+                    position="insideTopRight"
+                    fill="rgba(255,255,255,0.85)"
+                    fontSize={11}
+                    fontWeight={700}
+                  />
+                </ReferenceLine>
               </BarChart>
             </ResponsiveContainer>
           </div>
+          <p className="text-purple-400 text-xs mb-4 -mt-2">
+            Đường nét đứt = xác suất lý thuyết ({theoreticalPct.toFixed(1)}% mỗi mục). Tung càng nhiều lần, cột thực tế sẽ càng gần đường này — đó là <span className="text-purple-200 font-semibold">Luật số lớn</span>.
+          </p>
 
           {/* Percentage pills */}
           <div className="flex flex-wrap gap-2 mb-4">
-            {chartData.map((d, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold"
-                style={{ background: `${d.color}22`, border: `1px solid ${d.color}55`, color: d.color }}
-              >
-                <span>{d.name}</span>
-                <span className="text-white opacity-80">— {d.pct}%</span>
-              </div>
-            ))}
+            {chartData.map((d, i) => {
+              const diff = (parseFloat(d.pct) - theoreticalPct).toFixed(1);
+              return (
+                <div
+                  key={i}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold"
+                  style={{ background: `${d.color}22`, border: `1px solid ${d.color}55`, color: d.color }}
+                >
+                  <span>{d.name}</span>
+                  <span className="text-white opacity-80">— {d.pct}%</span>
+                  <span className="text-white opacity-50 text-xs font-normal">
+                    ({diff > 0 ? "+" : ""}{diff})
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
           {/* History chips */}

@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Coin3D from "@/components/Coin3D";
 import StatsBar from "@/components/StatsBar";
+import QuickSimButtons from "@/components/QuickSimButtons";
 import confetti from "canvas-confetti";
 
 const COIN_LABELS = ["Ngửa", "Sấp"];
@@ -35,6 +36,30 @@ export default function CoinGame() {
       });
     }, 1350);
   }, [isFlipping]);
+
+  const quickSimulate = useCallback(
+    (n) => {
+      if (isFlipping) return;
+      const newEntries = [];
+      let last = null;
+      for (let i = 0; i < n; i++) {
+        const r = Math.random() < 0.5 ? "heads" : "tails";
+        newEntries.push(r === "heads" ? "Ngửa" : "Sấp");
+        last = r;
+      }
+      setResult(last);
+      setHistory((prev) => [...newEntries.reverse(), ...prev].slice(0, 100));
+
+      confetti({
+        particleCount: 60,
+        spread: 80,
+        origin: { y: 0.55 },
+        colors: ["#FFD700", "#FF8C00", "#C0C0C0"],
+        scalar: 1,
+      });
+    },
+    [isFlipping]
+  );
 
   const reset = () => {
     setResult(null);
@@ -144,6 +169,8 @@ export default function CoinGame() {
           >
             {isFlipping ? "Đang tung..." : "🪙 Tung Đồng Xu"}
           </motion.button>
+
+          <QuickSimButtons onSimulate={quickSimulate} disabled={isFlipping} />
         </div>
       </div>
 
